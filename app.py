@@ -1,130 +1,155 @@
-import pandas as pd
 import streamlit as st
+import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
-# ===================== LOAD DATA =====================
+st.set_page_config(layout="wide")
+st.title("📊 Dashboard Visualisasi Kuesioner")
+
+# ===============================
+# LOAD DATA
+# ===============================
 file_path = "data_kuesioner.xlsx"
 df = pd.read_excel(file_path)
 
-questions = [f"Q{i}" for i in range(1, 18)]
-scales = ["SS", "S", "CS", "CTS", "TS", "STS"]
+if "Partisipan" in df.columns:
+    df = df.drop(columns=["Partisipan"])
 
-# ===================== SCORE MAPPING =====================
-score_map = {"SS":6, "S":5, "CS":4, "CTS":3, "TS":2, "STS":1}
+df_long = df.melt(var_name="Pertanyaan", value_name="Jawaban")
 
-# ===================== FLATTEN DATA =====================
-all_answers = df[questions].values.flatten()
-answer_counts = pd.Series(all_answers).value_counts().reindex(scales, fill_value=0)
-total_responses = answer_counts.sum()
-answer_percent = (answer_counts / total_responses * 100).round(2)
+df_long["Jawaban"] = (
+    df_long["Jawaban"]
+    .astype(str)
+    .str.strip()
+    .str.upper()
+)
 
-# ===================== DASHBOARD =====================
-st.title("📊 Dashboard Visualisasi Kuesioner")
-
-# --------- BAR CHART DISTRIBUSI ---------
-st.subheader("Distribusi Jawaban Keseluruhan (Bar Chart)")
-fig_bar = px.bar(x=scales, y=answer_counts.values, text=answer_counts.values)
-st.plotly_chart(fig_bar)
-
-# --------- PIE CHART ---------
-st.subheader("Proporsi Jawaban Keseluruhan (Pie Chart)")
-fig_pie = px.pie(values=answer_counts.values, names=scales)
-st.plotly_chart(fig_pie)
-
-# --------- STACKED BAR PER PERTANYAAN ---------
-st.subheader("Distribusi Jawaban per Pertanyaan (Stacked Bar)")
-stack_data = []
-for q in questions:
-    counts = df[q].value_counts().reindex(scales, fill_value=0)
-    temp = pd.DataFrame({"Pertanyaan": q, "Skala": scales, "Jumlah": counts.values})
-    stack_data.append(temp)
-
-stack_df = pd.concat(stack_data)
-fig_stack = px.bar(stack_df, x="Pertanyaan", y="Jumlah", color="Skala", barmode="stack")
-st.plotly_chart(fig_stack)
-
-# --------- RATA-RATA SKOR PER PERTANYAAN ---------
-st.subheader("Rata-rata Skor per Pertanyaan")
-score_df = df[questions].replace(score_map)
-mean_scores = score_df.mean()
-
-fig_mean = px.bar(x=questions, y=mean_scores.values, text=mean_scores.round(2))
-st.plotly_chart(fig_mean)
-
-# --------- KATEGORI POSITIF / NETRAL / NEGATIF ---------
-st.subheader("Distribusi Kategori Jawaban")
-category_map = {
-    "positif": ["SS", "S"],
-    "netral": ["CS"],
-    "negatif": ["CTS", "TS", "STS"]
+# ===============================
+# MAPPING SKOR
+# ===============================
+skor_map = {
+    "SS": 6,
+    "S": 5,
+    "CS": 4,
+    "CTS": 3,
+    "TS": 2,
+    "STS": 1
 }
 
-cat_counts = {
-    "positif": answer_counts[["SS", "S"]].sum(),
-    "netral": answer_counts[["CS"]].sum(),
-    "negatif": answer_counts[["CTS", "TS", "STS"]].sum()
-}
+df_long["Skor"] = df_long["Jawaban"].map(skor_map)
 
-fig_cat = px.bar(x=list(cat_counts.keys()), y=list(cat_counts.values()))
-st.plotly_chart(fig_cat)
+# ===============================
+# URUTAN Q1 - Q17
+# ===============================
+urutan_pertanyaan = [f"Q{i}" for i in range(1, 18)]
 
-# ===================== AUTO ANSWER SYSTEM =====================
-def print_answer(q):
-    if q == "q1":
-        scale = answer_counts.idxmax()
-        print(f"{scale}|{answer_counts.max()}|{answer_percent[scale]}")
+df_long["Pertanyaan"] = pd.Categorical(
+    df_long["Pertanyaan"],
+    categories=urutan_pertanyaan,
+    ordered=True
+)
 
-    elif q == "q2":
-        scale = answer_counts.idxmin()
-        print(f"{scale}|{answer_counts.min()}|{answer_percent[scale]}")
+# ===============================
+# 1️⃣ DISTRIBUSI KESELURUHAN
+# ===============================
+st.subheader("1️⃣ Distribusi Jawaban Keseluruhan")
 
-    elif q in ["q3","q4","q5","q6","q7","q8"]:
-        target_scale = {"q3":"SS","q4":"S","q5":"CS","q6":"CTS","q7":"TS","q8":"STS"}[q]
-        best_q = None
-        best_count = 0
-        
-        for question in questions:
-            c = (df[question] == target_scale).sum()
-            if c > best_count:
-                best_count = c
-                best_q = question
-        
-        percent = round(best_count / len(df) * 100, 2)
-        print(f"{best_q}|{best_count}|{percent}")
+distribusi = df_long["Jawaban"].value_counts().reset_index()
+distribusi.columns = ["Jawaban", "Jumlah"]
 
-    elif q == "q9":
-        results = []
-        for question in questions:
-            c = (df[question] == "STS").sum()
-            if c > 0:
-                percent = round(c / len(df) * 100, 2)
-                results.append(f"{question}:{percent}")
-        print("|".join(results))
+col1, col2 = st.columns(2)
 
-    elif q == "q10":
-        total_score = score_df.values.mean()
-        print(round(total_score, 2))
+with col1:
+    fig1 = px.bar(
+        distribusi,
+        x="Jawaban",
+        y="Jumlah",
+        text_auto=True,
+        title="Bar Chart Distribusi Jawaban"
+    )
+    st.plotly_chart(fig1, use_container_width=True)
 
-    elif q == "q11":
-        best_q = mean_scores.idxmax()
-        print(f"{best_q}:{round(mean_scores.max(),2)}")
+with col2:
+    fig2 = px.pie(
+        distribusi,
+        names="Jawaban",
+        values="Jumlah",
+        title="Pie Chart Proporsi Jawaban"
+    )
+    st.plotly_chart(fig2, use_container_width=True)
 
-    elif q == "q12":
-        worst_q = mean_scores.idxmin()
-        print(f"{worst_q}:{round(mean_scores.min(),2)}")
+# ===============================
+# 2️⃣ STACKED BAR PER PERTANYAAN
+# ===============================
+st.subheader("2️⃣ Distribusi Jawaban per Pertanyaan (Q1 - Q17)")
 
-    elif q == "q13":
-        total = sum(cat_counts.values())
-        output = []
-        for k,v in cat_counts.items():
-            percent = round(v/total*100,2)
-            output.append(f"{k}={v}:{percent}")
-        print("|".join(output))
+stacked = (
+    df_long
+    .groupby(["Pertanyaan", "Jawaban"])
+    .size()
+    .reset_index(name="Jumlah")
+    .sort_values("Pertanyaan")
+)
 
+fig3 = px.bar(
+    stacked,
+    x="Pertanyaan",
+    y="Jumlah",
+    color="Jawaban",
+    title="Stacked Bar per Pertanyaan"
+)
 
-# ===================== RUN QUESTION ANSWER =====================
-target_question = st.text_input("Masukkan kode pertanyaan (q1 - q13):")
+fig3.update_layout(barmode="stack")
 
-if target_question:
-    st.write("Output:")
-    print_answer(target_question)
+st.plotly_chart(fig3, use_container_width=True)
+
+# ===============================
+# 3️⃣ RATA-RATA SKOR
+# ===============================
+st.subheader("3️⃣ Rata-Rata Skor per Pertanyaan")
+
+rata_skor = (
+    df_long
+    .groupby("Pertanyaan")["Skor"]
+    .mean()
+    .reset_index()
+    .sort_values("Pertanyaan")
+)
+
+fig4 = px.bar(
+    rata_skor,
+    x="Pertanyaan",
+    y="Skor",
+    text_auto=True,
+    title="Rata-Rata Skor (Q1 - Q17)"
+)
+
+st.plotly_chart(fig4, use_container_width=True)
+
+# ===============================
+# 4️⃣ KATEGORI JAWABAN
+# ===============================
+st.subheader("4️⃣ Distribusi Kategori Jawaban")
+
+def kategori(j):
+    if j in ["SS", "S"]:
+        return "Positif"
+    elif j == "CS":
+        return "Netral"
+    else:
+        return "Negatif"
+
+df_long["Kategori"] = df_long["Jawaban"].apply(kategori)
+
+kategori_dist = df_long["Kategori"].value_counts().reset_index()
+kategori_dist.columns = ["Kategori", "Jumlah"]
+
+fig5 = px.bar(
+    kategori_dist,
+    x="Kategori",
+    y="Jumlah",
+    text_auto=True,
+    title="Distribusi Positif, Netral, Negatif"
+)
+
+st.plotly_chart(fig5, use_container_width=True)

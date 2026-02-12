@@ -18,10 +18,7 @@ elif target_question == "q5":
 elif target_question == "q6":
     print("Q9|8|7.1")
 
-elif target_question == "q7":
-    print("Q12|3|2.7")
-
-elif target_question == "q8":
+elif target_question in ("q7", "q8"):
     print("Q12|3|2.7")
 
 elif target_question == "q9":
