@@ -3,7 +3,7 @@ import streamlit as st
 import plotly.express as px
 
 # ===================== LOAD DATA =====================
-file_path = "/mnt/data/data_kuesioner.xlsx"
+file_path = "data_kuesioner.xlsx"
 df = pd.read_excel(file_path)
 
 questions = [f"Q{i}" for i in range(1, 18)]
